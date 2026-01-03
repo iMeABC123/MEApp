@@ -1,10 +1,15 @@
-// ME App — 2026 Workbook (Single User) v1
+// ME App — 2026 Workbook (Single User) v1.1
+// Option C: "Living It Out Loud" applies ONLY to Matthew McLamb.
+// Everyone else sees a neutral title.
+//
 // Stores everything locally on the device via localStorage.
-// No Patrick. No multi-user dashboard.
 // Features: profile, numerology basics, monthly worksheets, alignment meter,
-// decision matrix, identity wheel (simple), year-end extraction, export/reset.
+// decision matrix, identity wheel (data foundation), year-end extraction, export/reset.
 
 const STORAGE_KEY = "meapp_single_2026_v1";
+const OWNER_NAME_CANON = "matthew mclamb";
+const OWNER_TITLE_2026 = "2026 Orientation — Living It Out Loud";
+const DEFAULT_TITLE_2026 = "2026 Personal Workbook";
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -31,7 +36,7 @@ function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -61,7 +66,7 @@ function buildEmptyWorkbook() {
       reflection: "",
       expression: "",
       relationships: "",
-      alignmentScore: 50,  // 0-100
+      alignmentScore: 50, // 0-100
       decision: {
         prompt: "",
         fear: "",
@@ -83,7 +88,7 @@ function buildEmptyWorkbook() {
 
   return {
     year: 2026,
-    title: "2026 Orientation — Living It Out Loud",
+    title: DEFAULT_TITLE_2026,
     months,
     yearEnd: {
       stayedTrue: "",
@@ -94,6 +99,17 @@ function buildEmptyWorkbook() {
       letterToFutureSelf: ""
     }
   };
+}
+
+// Apply owner-only title (Option C)
+function applyOwnerTitleIfNeeded(state) {
+  const name = (state.profile?.name || "").trim().toLowerCase();
+  if (name === OWNER_NAME_CANON) {
+    state.workbook.title = OWNER_TITLE_2026;
+  } else if (!state.workbook.title || state.workbook.title === OWNER_TITLE_2026) {
+    // Keep non-owner neutral (and avoid accidentally inheriting owner title)
+    state.workbook.title = DEFAULT_TITLE_2026;
+  }
 }
 
 // ---------- Numerology ----------
@@ -157,9 +173,8 @@ function monthProgressSummary(m) {
 // ---------- Rendering ----------
 function render() {
   const state = ensureState();
+  applyOwnerTitleIfNeeded(state);
 
-  // If index.html still has the old simple output div, we’ll render into it.
-  // Prefer a container with id="app" if you add it later.
   const container = el("output") || el("app") || document.body;
 
   if (state.ui.currentView === "home") {
@@ -194,7 +209,6 @@ function render() {
     return;
   }
 
-  // fallback
   state.ui.currentView = "dashboard";
   saveState(state);
   container.innerHTML = renderDashboard(state);
@@ -202,8 +216,6 @@ function render() {
 }
 
 function renderHome(state) {
-  // Uses your existing input fields (name/birthdate/birthplace) in index.html
-  // We just add buttons and a small status section below.
   const p = state.profile;
   const summary = p
     ? `<div class="me-card">
@@ -224,6 +236,7 @@ function renderHome(state) {
         <button id="btnStart" style="flex:1; min-width:160px;">Open 2026 Dashboard</button>
         <button id="btnReset" style="flex:1; min-width:160px; background:#ef4444; color:#fff;">Reset Data</button>
       </div>
+
       <div style="margin-top:10px; font-size: 14px; opacity:0.9;">
         Tip: Your entries are saved on this device.
       </div>
@@ -233,15 +246,11 @@ function renderHome(state) {
 }
 
 function wireHome(state) {
-  // Pull from your existing index.html fields
   const nameInput = el("name");
   const birthdateInput = el("birthdate");
   const birthplaceInput = el("birthplace");
 
-  const btnStart = el("btnStart");
-  const btnReset = el("btnReset");
-
-  btnStart?.addEventListener("click", () => {
+  el("btnStart")?.addEventListener("click", () => {
     const name = nameInput?.value?.trim() || "";
     const birthdate = birthdateInput?.value || "";
     const birthplace = birthplaceInput?.value?.trim() || "";
@@ -251,20 +260,18 @@ function wireHome(state) {
       return;
     }
 
-    // Save profile
     state.profile = { name, birthdate, birthplace };
+    applyOwnerTitleIfNeeded(state);
 
-    // keep existing workbook entries if present; otherwise default already exists
     state.ui.currentView = "dashboard";
     saveState(state);
     render();
   });
 
-  btnReset?.addEventListener("click", () => {
+  el("btnReset")?.addEventListener("click", () => {
     const ok = confirm("Reset all ME App data on this phone? This cannot be undone.");
     if (!ok) return;
     localStorage.removeItem(STORAGE_KEY);
-    // reload fresh
     ensureState();
     render();
   });
@@ -291,7 +298,7 @@ function renderDashboard(state) {
     <div class="me-topbar">
       <div>
         <div class="me-h1">Welcome, ${escapeHtml(p.name)}</div>
-        <div class="me-sub">Your 2026 workbook is saved on this device.</div>
+        <div class="me-sub">${escapeHtml(state.workbook.title)} • Saved on this device</div>
       </div>
       <button id="btnExport" class="me-chip">Export</button>
     </div>
@@ -500,7 +507,6 @@ function wireMonth(state) {
     render();
   });
 
-  // Alignment live update
   const align = el("alignment");
   align?.addEventListener("input", () => {
     const v = Number(align.value);
@@ -528,20 +534,16 @@ function wireMonth(state) {
     setTimeout(()=>{ el("saveMsg2").textContent = ""; }, 1200);
   });
 
-  // Save alignment
   align?.addEventListener("change", () => {
     m.alignmentScore = Number(align.value);
     saveState(state);
   });
 
-  // Wheel live update
   document.querySelectorAll(".wheel-row").forEach(row => {
-    const key = row.getAttribute("data-wheel");
     const slider = row.querySelector(".wheel-slider");
     const valEl = row.querySelector(".wheel-val");
     slider?.addEventListener("input", () => {
-      const v = Number(slider.value);
-      valEl.textContent = String(v);
+      valEl.textContent = String(slider.value);
     });
   });
 
@@ -634,22 +636,20 @@ function wireYearEnd(state) {
 
 // ---------- Export ----------
 function exportData(state) {
+  applyOwnerTitleIfNeeded(state);
   const exportObj = {
     exportedAt: new Date().toISOString(),
     app: "ME App",
-    version: "single_2026_v1",
+    version: "single_2026_v1.1",
     profile: state.profile,
     workbook: state.workbook
   };
 
   const json = JSON.stringify(exportObj, null, 2);
-  // Copy to clipboard
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(json).then(() => {
       alert("Export copied to clipboard ✅\n\nPaste it into Notes/Email to save or send.");
-    }).catch(() => {
-      fallbackDownload(json);
-    });
+    }).catch(() => fallbackDownload(json));
   } else {
     fallbackDownload(json);
   }
@@ -669,17 +669,14 @@ function fallbackDownload(json) {
 
 // ---------- Hook into your existing button ----------
 function createProfile() {
-  // Your existing index.html calls this from the button.
-  // We now route it to the app workflow.
   const state = ensureState();
   state.ui.currentView = "home";
+  applyOwnerTitleIfNeeded(state);
   saveState(state);
   render();
 }
 
 // ---------- Boot ----------
 (function boot() {
-  // Render immediately so your app shows controls even before pressing the button.
-  // If you prefer, you can remove this and rely on createProfile().
-  try { render(); } catch (e) { /* ignore */ }
+  try { render(); } catch {}
 })();
