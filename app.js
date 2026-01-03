@@ -1,6 +1,8 @@
-// ME App — 2026 Workbook (Single User) v1.2
-// Personalized year title + theme generated from Numerology + Western Sun Sign + Chinese Zodiac.
-// Stores everything locally on the device via localStorage.
+// ME App — 2026 Workbook (Single User) v1.6
+// - Autosaves every keystroke (debounced)
+// - Adds Daily + Weekly logging inside each month
+// - Keeps Monthly reflection/expression/relationships + decision matrix + alignment + identity wheel (visual)
+// - Prevents losing typed text when navigating back/forth
 
 const STORAGE_KEY = "meapp_single_2026_v1";
 const YEAR = 2026;
@@ -10,7 +12,6 @@ const MONTHS = [
   "July","August","September","October","November","December"
 ];
 
-// Default month themes (can be overwritten by theme generator)
 const DEFAULT_MONTH_THEMES = {
   January:  "Where I Am Now",
   February: "Choice",
@@ -26,61 +27,58 @@ const DEFAULT_MONTH_THEMES = {
   December: "Living It Out Loud"
 };
 
+const WHEEL_KEYS = [
+  ["selfExpression", "Self-Expression"],
+  ["courage", "Courage"],
+  ["boundaries", "Boundaries"],
+  ["creativity", "Creativity"],
+  ["relationships", "Relationships"],
+  ["discipline", "Discipline"]
+];
+
 // ---------- Storage ----------
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function saveState(state) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-function ensureState() {
-  let state = loadState();
-  if (!state) {
-    state = {
-      profile: null,
-      workbook: buildEmptyWorkbook(),
-      ui: { currentView: "home", currentMonth: "January" }
-    };
-    saveState(state);
-  }
-  return state;
+function debounce(fn, wait=250) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
+const autosave = debounce((state) => saveState(state), 250);
+
+function buildEmptyMonth(name) {
+  return {
+    theme: DEFAULT_MONTH_THEMES[name] || "",
+    // Monthly
+    reflection: "",
+    expression: "",
+    relationships: "",
+    alignmentScore: 50,
+    decision: { prompt:"", fear:"", costOfInaction:"", alignedAction:"", smallestStep:"" },
+    identityWheel: { selfExpression:5, courage:5, boundaries:5, creativity:5, relationships:5, discipline:5 },
+    // Daily & Weekly
+    dailyLogs: {}, // { "YYYY-MM-DD": "text" }
+    weeklyLogs: { week1:"", week2:"", week3:"", week4:"", week5:"" },
+    // UI helpers (remember last selected day/week inside the month)
+    _uiDailyDate: "",
+    _uiWeeklyKey: "week1"
+  };
 }
 
 function buildEmptyWorkbook() {
   const months = {};
-  MONTHS.forEach(m => {
-    months[m] = {
-      theme: DEFAULT_MONTH_THEMES[m] || "",
-      reflection: "",
-      expression: "",
-      relationships: "",
-      alignmentScore: 50, // 0-100
-      decision: {
-        prompt: "",
-        fear: "",
-        costOfInaction: "",
-        alignedAction: "",
-        smallestStep: ""
-      },
-      identityWheel: {
-        // 0-10 sliders
-        selfExpression: 5,
-        courage: 5,
-        boundaries: 5,
-        creativity: 5,
-        relationships: 5,
-        discipline: 5
-      }
-    };
-  });
-
+  MONTHS.forEach(m => months[m] = buildEmptyMonth(m));
   return {
     year: YEAR,
     title: "2026 Personal Workbook",
@@ -104,197 +102,53 @@ function buildEmptyWorkbook() {
   };
 }
 
-// ---------- Numerology ----------
-function reduceNumber(n) {
-  while (n > 9 && n !== 11 && n !== 22 && n !== 33) {
-    n = n.toString().split("").reduce((a, d) => a + Number(d), 0);
-  }
-  return n;
-}
+function migrate(state) {
+  if (!state.ui) state.ui = { currentView: "home", currentMonth: "January" };
+  if (!state.workbook) state.workbook = buildEmptyWorkbook();
+  if (!state.workbook.months) state.workbook.months = {};
 
-function lifePathFromISO(iso) {
-  if (!iso) return null;
-  const digits = iso.replaceAll("-", "").split("").map(Number);
-  const sum = digits.reduce((a,b)=>a+b,0);
-  return reduceNumber(sum);
-}
-
-function birthdayNumberFromISO(iso) {
-  if (!iso) return null;
-  const day = Number(iso.split("-")[2]);
-  return reduceNumber(day);
-}
-
-function personalYearNumber(birthIso, year) {
-  if (!birthIso) return null;
-  const [,m,d] = birthIso.split("-").map(Number);
-  const sum = reduceNumber(m) + reduceNumber(d) + reduceNumber(year);
-  return reduceNumber(sum);
-}
-
-// ---------- Western Sun Sign (approx but standard) ----------
-function sunSignFromISO(iso) {
-  const [,m,d] = iso.split("-").map(Number);
-  if ((m===3 && d>=21) || (m===4 && d<=19)) return "Aries";
-  if ((m===4 && d>=20) || (m===5 && d<=20)) return "Taurus";
-  if ((m===5 && d>=21) || (m===6 && d<=20)) return "Gemini";
-  if ((m===6 && d>=21) || (m===7 && d<=22)) return "Cancer";
-  if ((m===7 && d>=23) || (m===8 && d<=22)) return "Leo";
-  if ((m===8 && d>=23) || (m===9 && d<=22)) return "Virgo";
-  if ((m===9 && d>=23) || (m===10 && d<=22)) return "Libra";
-  if ((m===10 && d>=23) || (m===11 && d<=21)) return "Scorpio";
-  if ((m===11 && d>=22) || (m===12 && d<=21)) return "Sagittarius";
-  if ((m===12 && d>=22) || (m===1 && d<=19)) return "Capricorn";
-  if ((m===1 && d>=20) || (m===2 && d<=18)) return "Aquarius";
-  return "Pisces";
-}
-
-// ---------- Chinese Zodiac (animal + element cycle; simplified but correct) ----------
-function mod(n, m) { return ((n % m) + m) % m; }
-
-function chineseZodiacFromYear(year) {
-  // 1984 = Rat (start of a common reference cycle)
-  const animals = ["Rat","Ox","Tiger","Rabbit","Dragon","Snake","Horse","Goat","Monkey","Rooster","Dog","Pig"];
-  const animal = animals[mod(year - 1984, 12)];
-
-  // Heavenly stems 10-cycle (Wood Wood Fire Fire Earth Earth Metal Metal Water Water)
-  const stems = ["Wood","Wood","Fire","Fire","Earth","Earth","Metal","Metal","Water","Water"];
-  const element = stems[mod(year - 1984, 10)];
-
-  return { animal, element };
-}
-
-// ---------- Theme generator ----------
-function capitalize(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
-
-function themeFromProfile(profile) {
-  const lifePath = lifePathFromISO(profile.birthdate);
-  const birthdayNum = birthdayNumberFromISO(profile.birthdate);
-  const personalYear = personalYearNumber(profile.birthdate, YEAR);
-  const sunSign = sunSignFromISO(profile.birthdate);
-  const birthYear = Number(profile.birthdate.split("-")[0]);
-  const cz = chineseZodiacFromYear(birthYear);
-
-  const pyWords = {
-    1: ["new beginnings","bold choices","identity"],
-    2: ["patience","partnership","emotional truth"],
-    3: ["expression","joy","visibility"],
-    4: ["structure","discipline","stability"],
-    5: ["freedom","change","courage"],
-    6: ["love","responsibility","home"],
-    7: ["inner work","spiritual clarity","study"],
-    8: ["power","money mastery","leadership"],
-    9: ["release","completion","forgiveness"],
-    11:["intuition","awakening","calling"],
-    22:["builder energy","legacy","systems"],
-    33:["service","healing","devotion"]
-  };
-
-  const lpLine = {
-    1:"Lead with self-trust.",
-    2:"Choose peace and honesty.",
-    3:"Say it out loud.",
-    4:"Build what lasts.",
-    5:"Take the brave step.",
-    6:"Nurture what matters.",
-    7:"Listen deeper.",
-    8:"Own your power cleanly.",
-    9:"Let go to move forward.",
-    11:"Follow the signal.",
-    22:"Build the vision.",
-    33:"Serve with heart."
-  };
-
-  const signFlavor = {
-    Aries:"act decisively",
-    Taurus:"simplify and stabilize",
-    Gemini:"speak, connect, experiment",
-    Cancer:"protect your inner world",
-    Leo:"be seen on purpose",
-    Virgo:"refine and improve",
-    Libra:"choose balance over pleasing",
-    Scorpio:"tell the truth fully",
-    Sagittarius:"expand and commit",
-    Capricorn:"build and lead steadily",
-    Aquarius:"be original and consistent",
-    Pisces:"trust intuition and create meaning"
-  };
-
-  const words = pyWords[personalYear] || ["alignment","truth","momentum"];
-  const title = `2026: ${capitalize(words[0])} & ${capitalize(words[2])}`;
-  const themeLine = `${lpLine[lifePath] || "Choose what aligns."} ${sunSign}: ${signFlavor[sunSign] || "act with honesty"} • ${cz.element} ${cz.animal}`;
-
-  // Optional: tailor month themes based on personal year + sign
-  const monthOverrides = buildMonthThemes(personalYear, sunSign);
-
-  return {
-    title,
-    themeLine,
-    insights: {
-      lifePath,
-      birthdayNumber: birthdayNum,
-      personalYear,
-      sunSign,
-      chineseZodiac: cz
-    },
-    monthOverrides
-  };
-}
-
-function buildMonthThemes(personalYear, sunSign) {
-  // Keep your original structure but add slight personal seasoning.
-  const base = { ...DEFAULT_MONTH_THEMES };
-
-  // Personal Year steering: subtle & helpful
-  const pyHint = {
-    1: "Start",
-    2: "Relate",
-    3: "Express",
-    4: "Build",
-    5: "Change",
-    6: "Care",
-    7: "Reflect",
-    8: "Lead",
-    9: "Release",
-    11:"Awaken",
-    22:"Construct",
-    33:"Serve"
-  }[personalYear] || "Align";
-
-  // Sun sign flavor word (short)
-  const signWord = {
-    Aries:"Bold", Taurus:"Steady", Gemini:"Curious", Cancer:"Protected",
-    Leo:"Visible", Virgo:"Refined", Libra:"Balanced", Scorpio:"Truthful",
-    Sagittarius:"Expansive", Capricorn:"Grounded", Aquarius:"Original", Pisces:"Intuitive"
-  }[sunSign] || "Clear";
-
-  // Blend into a few months without changing your overall arc
-  base.February = `${base.February} — ${pyHint}`;
-  base.May = `${base.May} — ${signWord}`;
-  base.August = `${base.August} — ${pyHint}`;
-  base.December = `Integration — ${signWord}`;
-
-  return base;
-}
-
-function applyPersonalTheme(state) {
-  if (!state.profile?.birthdate) return;
-
-  const t = themeFromProfile(state.profile);
-
-  state.workbook.title = t.title;
-  state.workbook.themeLine = t.themeLine;
-  state.workbook.profileInsights = t.insights;
-
-  // Apply month overrides (only set if month theme still default-ish or empty)
   MONTHS.forEach(m => {
-    const current = state.workbook.months[m].theme || "";
-    const override = t.monthOverrides[m] || "";
-    // If user hasn't customized it, apply the override
-    if (!current || current === DEFAULT_MONTH_THEMES[m]) {
-      state.workbook.months[m].theme = override || current || DEFAULT_MONTH_THEMES[m];
-    }
+    if (!state.workbook.months[m]) state.workbook.months[m] = buildEmptyMonth(m);
+    const mm = state.workbook.months[m];
+
+    if (!mm.decision) mm.decision = { prompt:"", fear:"", costOfInaction:"", alignedAction:"", smallestStep:"" };
+    if (!mm.identityWheel) mm.identityWheel = { selfExpression:5, courage:5, boundaries:5, creativity:5, relationships:5, discipline:5 };
+    WHEEL_KEYS.forEach(([k]) => { if (mm.identityWheel[k] === undefined) mm.identityWheel[k] = 5; });
+
+    if (mm.alignmentScore === undefined) mm.alignmentScore = 50;
+    if (!mm.dailyLogs) mm.dailyLogs = {};
+    if (!mm.weeklyLogs) mm.weeklyLogs = { week1:"", week2:"", week3:"", week4:"", week5:"" };
+    if (!mm._uiWeeklyKey) mm._uiWeeklyKey = "week1";
+    if (mm._uiDailyDate === undefined) mm._uiDailyDate = "";
+    if (mm.reflection === undefined) mm.reflection = "";
+    if (mm.expression === undefined) mm.expression = "";
+    if (mm.relationships === undefined) mm.relationships = "";
+    if (!mm.theme) mm.theme = DEFAULT_MONTH_THEMES[m] || "";
   });
+
+  if (!state.workbook.yearEnd) {
+    state.workbook.yearEnd = {
+      stayedTrue:"", shifted:"", decisionsThatMattered:"", identitySnapshot:"",
+      letterToPastSelf:"", letterToFutureSelf:""
+    };
+  }
+}
+
+function ensureState() {
+  let s = loadState();
+  if (!s) {
+    s = { profile:null, workbook:buildEmptyWorkbook(), ui:{ currentView:"home", currentMonth:"January" } };
+    saveState(s);
+  } else {
+    migrate(s);
+    saveState(s);
+  }
+  return s;
+}
+
+function hardResetAll() {
+  localStorage.removeItem(STORAGE_KEY);
+  return ensureState();
 }
 
 // ---------- Helpers ----------
@@ -309,6 +163,14 @@ function escapeHtml(str) {
     .replaceAll("'","&#039;");
 }
 
+function todayISO() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function alignmentLabel(score) {
   if (score >= 85) return "Fully Aligned";
   if (score >= 70) return "Mostly Aligned";
@@ -318,18 +180,106 @@ function alignmentLabel(score) {
 }
 
 function monthProgressSummary(m) {
+  const hasDaily = Object.values(m.dailyLogs || {}).some(v => String(v||"").trim());
+  const hasWeekly = Object.values(m.weeklyLogs || {}).some(v => String(v||"").trim());
   const filled =
-    (m.reflection?.trim() ? 1 : 0) +
-    (m.expression?.trim() ? 1 : 0) +
-    (m.relationships?.trim() ? 1 : 0) +
-    (m.decision?.prompt?.trim() ? 1 : 0);
-  return `${filled}/4 sections filled`;
+    (m.reflection?.trim()?1:0) +
+    (m.expression?.trim()?1:0) +
+    (m.relationships?.trim()?1:0) +
+    (m.decision?.prompt?.trim()?1:0) +
+    (hasDaily?1:0) +
+    (hasWeekly?1:0);
+  return `${filled}/6 areas touched`;
 }
 
-// ---------- Rendering ----------
+function wheelAverage(w) {
+  const vals = WHEEL_KEYS.map(([k]) => Number(w[k] ?? 0));
+  const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+  return Math.round(avg * 10) / 10;
+}
+
+// ---------- Identity Wheel Drawing (Canvas radar chart) ----------
+function drawIdentityWheel(canvas, wheelValues, options={}) {
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+
+  const cssW = options.size || 280;
+  const cssH = options.size || 280;
+  canvas.style.width = cssW + "px";
+  canvas.style.height = cssH + "px";
+  canvas.width = Math.floor(cssW * dpr);
+  canvas.height = Math.floor(cssH * dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  ctx.clearRect(0,0,cssW,cssH);
+
+  const cx = cssW/2, cy = cssH/2;
+  const radius = Math.min(cssW, cssH) * 0.36;
+
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.10)";
+
+  const rings = 5;
+  for (let r=1; r<=rings; r++){
+    const rr = radius * (r/rings);
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  const n = WHEEL_KEYS.length;
+  for (let i=0;i<n;i++){
+    const ang = (-Math.PI/2) + (i*(2*Math.PI/n));
+    const x = cx + radius * Math.cos(ang);
+    const y = cy + radius * Math.sin(ang);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "rgba(248,250,252,0.85)";
+  ctx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
+  WHEEL_KEYS.forEach(([,label], i) => {
+    const ang = (-Math.PI/2) + (i*(2*Math.PI/n));
+    const lx = cx + (radius*1.18) * Math.cos(ang);
+    const ly = cy + (radius*1.18) * Math.sin(ang);
+    const metrics = ctx.measureText(label);
+
+    let tx = lx - metrics.width/2;
+    let ty = ly + 4;
+    if (lx < cx - radius*0.2) tx = lx - metrics.width;
+    if (lx > cx + radius*0.2) tx = lx;
+    if (Math.abs(ly - cy) < 10) ty = ly + 14;
+
+    ctx.fillText(label, tx, ty);
+  });
+
+  const getVal = (key) => Math.max(0, Math.min(10, Number(wheelValues[key] ?? 0)));
+  const pts = WHEEL_KEYS.map(([k], i) => {
+    const v = getVal(k) / 10;
+    const ang = (-Math.PI/2) + (i*(2*Math.PI/n));
+    return { x: cx + (radius * v) * Math.cos(ang), y: cy + (radius * v) * Math.sin(ang) };
+  });
+
+  ctx.beginPath();
+  pts.forEach((p, i) => { if (i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
+  ctx.closePath();
+  ctx.fillStyle = "rgba(56,189,248,0.18)";
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(56,189,248,0.75)";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(56,189,248,0.95)";
+  pts.forEach(p => { ctx.beginPath(); ctx.arc(p.x,p.y, 3, 0, Math.PI*2); ctx.fill(); });
+}
+
+// ---------- Render ----------
 function render() {
   const state = ensureState();
-
   const container = el("output") || el("app") || document.body;
 
   if (state.ui.currentView === "home") {
@@ -340,7 +290,7 @@ function render() {
 
   if (!state.profile) {
     state.ui.currentView = "home";
-    saveState(state);
+    autosave(state);
     container.innerHTML = renderHome(state);
     wireHome(state);
     return;
@@ -365,39 +315,34 @@ function render() {
   }
 
   state.ui.currentView = "dashboard";
-  saveState(state);
+  autosave(state);
   container.innerHTML = renderDashboard(state);
   wireDashboard(state);
 }
 
 function renderHome(state) {
-  const p = state.profile;
-  const summary = p
-    ? `<div class="me-card">
-         <h3>Loaded Profile</h3>
-         <div><strong>${escapeHtml(p.name)}</strong></div>
-         <div>Birthdate: ${escapeHtml(p.birthdate)}</div>
-         <div>Birthplace: ${escapeHtml(p.birthplace)}</div>
-       </div>`
-    : "";
-
   return `
     <div class="me-card">
       <h2>ME App</h2>
       <p><strong>${escapeHtml(state.workbook.title)}</strong></p>
-      ${state.workbook.themeLine ? `<p style="opacity:.9">${escapeHtml(state.workbook.themeLine)}</p>` : ""}
-      <p>Enter your information above, then tap the button.</p>
+      <p>Autosave is ON. You can type without losing anything.</p>
 
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
         <button id="btnStart" style="flex:1; min-width:160px;">Open 2026 Dashboard</button>
         <button id="btnReset" style="flex:1; min-width:160px; background:#ef4444; color:#fff;">Reset Data</button>
       </div>
+    </div>
 
-      <div style="margin-top:10px; font-size: 14px; opacity:0.9;">
-        Tip: Your entries are saved on this device.
+    <div class="me-card">
+      <h3>Profile</h3>
+      <div style="opacity:.85; font-size:14px; margin-bottom:8px;">
+        Use the Name / Birthdate fields above, then tap Open.
       </div>
     </div>
-    ${summary}
+
+    <style>
+      .me-card{background:#1e293b; padding:16px; border-radius:12px; margin-bottom:12px;}
+    </style>
   `;
 }
 
@@ -417,91 +362,55 @@ function wireHome(state) {
     }
 
     state.profile = { name, birthdate, birthplace };
-
-    // Generate personalized title/theme
-    applyPersonalTheme(state);
-
     state.ui.currentView = "dashboard";
-    saveState(state);
+    autosave(state);
     render();
   });
 
   el("btnReset")?.addEventListener("click", () => {
-    const ok = confirm("Reset all ME App data on this phone? This cannot be undone.");
+    const ok = confirm("Reset all ME App data on this device? This cannot be undone.");
     if (!ok) return;
-    localStorage.removeItem(STORAGE_KEY);
-    ensureState();
+    hardResetAll();
     render();
   });
 }
 
 function renderDashboard(state) {
-  const p = state.profile;
-  const i = state.workbook.profileInsights;
-
   const monthCards = MONTHS.map(m => {
     const mm = state.workbook.months[m];
     return `
       <button class="me-month" data-month="${m}">
         <div class="me-month-title">${m}</div>
         <div class="me-month-sub">Theme: ${escapeHtml(mm.theme)}</div>
-        <div class="me-month-sub">${monthProgressSummary(mm)} • Alignment: ${mm.alignmentScore}/100</div>
+        <div class="me-month-sub">${monthProgressSummary(mm)} • Alignment: ${mm.alignmentScore}/100 • Wheel avg: ${wheelAverage(mm.identityWheel)}</div>
       </button>
     `;
   }).join("");
 
   return `
     <div class="me-topbar">
-      <div>
-        <div class="me-h1">Welcome, ${escapeHtml(p.name)}</div>
-        <div class="me-sub"><strong>${escapeHtml(state.workbook.title)}</strong></div>
-        ${state.workbook.themeLine ? `<div class="me-sub">${escapeHtml(state.workbook.themeLine)}</div>` : ""}
-      </div>
-      <button id="btnExport" class="me-chip">Export</button>
-    </div>
-
-    <div class="me-grid">
-      <div class="me-card">
-        <h3>Identity Snapshot</h3>
-        <div><strong>Birthdate:</strong> ${escapeHtml(p.birthdate)}</div>
-        <div><strong>Birthplace:</strong> ${escapeHtml(p.birthplace)}</div>
-        <hr class="me-hr"/>
-        <div><strong>Life Path:</strong> ${i.lifePath ?? "—"}</div>
-        <div><strong>Birthday Number:</strong> ${i.birthdayNumber ?? "—"}</div>
-        <div><strong>Personal Year (2026):</strong> ${i.personalYear ?? "—"}</div>
-        <div><strong>Sun Sign:</strong> ${escapeHtml(i.sunSign || "—")}</div>
-        <div><strong>Chinese Zodiac:</strong> ${escapeHtml((i.chineseZodiac?.element || "") + " " + (i.chineseZodiac?.animal || ""))}</div>
-      </div>
-
-      <div class="me-card">
-        <h3>Navigate</h3>
-        <button id="btnYearEnd" class="me-primary">Year-End Extraction</button>
-        <button id="btnBackHome" class="me-secondary">Edit Profile</button>
+      <div class="me-h1">Dashboard</div>
+      <div style="display:flex; gap:10px;">
+        <button id="btnYearEnd" class="me-chip">Year-End</button>
+        <button id="btnExport" class="me-chip">Export</button>
       </div>
     </div>
 
     <div class="me-card">
       <h3>Months</h3>
-      <div class="me-months">
-        ${monthCards}
-      </div>
+      <div class="me-months">${monthCards}</div>
     </div>
 
     <style>
-      .me-topbar{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin: 10px 0 16px;}
-      .me-h1{font-size:28px; font-weight:800; margin-bottom:4px;}
-      .me-sub{opacity:0.85}
-      .me-chip{background:#0ea5e9; color:#021019; border:none; padding:10px 12px; border-radius:10px; font-weight:700;}
-      .me-grid{display:grid; grid-template-columns: 1fr; gap:12px;}
+      .me-topbar{display:flex; justify-content:space-between; align-items:center; gap:12px; margin: 10px 0 16px;}
+      .me-h1{font-size:26px; font-weight:900;}
+      .me-chip{background:#0ea5e9; color:#021019; border:none; padding:10px 12px; border-radius:10px; font-weight:900;}
       .me-card{background:#1e293b; padding:16px; border-radius:12px; margin-bottom:12px;}
-      .me-hr{border:none; border-top:1px solid rgba(255,255,255,0.12); margin:12px 0;}
-      .me-primary{width:100%; padding:12px; border-radius:10px; border:none; background:#38bdf8; color:#020617; font-size:16px; font-weight:700; margin-top:8px;}
-      .me-secondary{width:100%; padding:12px; border-radius:10px; border:none; background:#334155; color:#f8fafc; font-size:16px; font-weight:700; margin-top:8px;}
-      .me-months{display:grid; grid-template-columns: 1fr; gap:10px;}
+      .me-months{display:grid; grid-template-columns:1fr; gap:10px;}
       .me-month{width:100%; text-align:left; padding:14px; border:none; border-radius:12px; background:#0b1220; color:#f8fafc;}
-      .me-month-title{font-size:18px; font-weight:800; margin-bottom:4px;}
+      .me-month-title{font-size:18px; font-weight:900; margin-bottom:4px;}
       .me-month-sub{opacity:0.85; font-size:14px;}
-      @media(min-width:650px){ .me-months{grid-template-columns: 1fr 1fr;} .me-grid{grid-template-columns: 1fr 1fr;} }
+      @media(min-width:650px){ .me-months{grid-template-columns:1fr 1fr;} }
     </style>
   `;
 }
@@ -509,13 +418,7 @@ function renderDashboard(state) {
 function wireDashboard(state) {
   el("btnYearEnd")?.addEventListener("click", () => {
     state.ui.currentView = "yearEnd";
-    saveState(state);
-    render();
-  });
-
-  el("btnBackHome")?.addEventListener("click", () => {
-    state.ui.currentView = "home";
-    saveState(state);
+    autosave(state);
     render();
   });
 
@@ -523,22 +426,22 @@ function wireDashboard(state) {
 
   document.querySelectorAll(".me-month").forEach(btn => {
     btn.addEventListener("click", () => {
-      const m = btn.getAttribute("data-month");
-      state.ui.currentMonth = m;
+      state.ui.currentMonth = btn.getAttribute("data-month");
       state.ui.currentView = "month";
-      saveState(state);
+      autosave(state);
       render();
     });
   });
 }
 
 function renderMonth(state) {
-  const mName = state.ui.currentMonth;
-  const m = state.workbook.months[mName];
+  const name = state.ui.currentMonth;
+  const m = state.workbook.months[name];
 
-  const idw = m.identityWheel;
-  const wheelTotal = Object.values(idw).reduce((a,b)=>a+b,0);
-  const wheelAvg = Math.round((wheelTotal / Object.keys(idw).length) * 10) / 10;
+  const dailyDate = m._uiDailyDate || todayISO();
+  const dailyText = m.dailyLogs[dailyDate] || "";
+  const weeklyKey = m._uiWeeklyKey || "week1";
+  const weeklyText = m.weeklyLogs[weeklyKey] || "";
 
   return `
     <div class="me-topbar">
@@ -548,22 +451,45 @@ function renderMonth(state) {
     </div>
 
     <div class="me-card">
-      <h2 style="margin:0 0 6px;">${escapeHtml(mName)}</h2>
-      <div style="opacity:0.9;">Theme: <strong>${escapeHtml(m.theme)}</strong></div>
+      <h2 style="margin:0 0 6px;">${escapeHtml(name)}</h2>
+      <div style="opacity:0.85; font-size:14px;">Autosave ON — everything you type is saved.</div>
     </div>
 
     <div class="me-card">
-      <h3>Reflection</h3>
-      <textarea id="reflection" class="me-textarea" placeholder="What came up for me this month?">${escapeHtml(m.reflection)}</textarea>
+      <h3>Identity Wheel</h3>
+      <div style="opacity:.85; margin-bottom:8px;">Average: <strong>${wheelAverage(m.identityWheel)}</strong>/10</div>
+      <canvas id="monthWheel"></canvas>
+    </div>
+
+    <div class="me-card">
+      <h3>Daily Log</h3>
+      <label class="me-label">Date</label>
+      <input id="dailyDate" type="date" value="${escapeHtml(dailyDate)}" />
+      <label class="me-label">Entry</label>
+      <textarea id="dailyText" class="me-textarea">${escapeHtml(dailyText)}</textarea>
+    </div>
+
+    <div class="me-card">
+      <h3>Weekly Log</h3>
+      <label class="me-label">Week</label>
+      <select id="weeklyKey" class="me-select">
+        ${["week1","week2","week3","week4","week5"].map(k => `
+          <option value="${k}" ${k===weeklyKey?"selected":""}>${k.toUpperCase()}</option>
+        `).join("")}
+      </select>
+      <label class="me-label">Entry</label>
+      <textarea id="weeklyText" class="me-textarea">${escapeHtml(weeklyText)}</textarea>
+    </div>
+
+    <div class="me-card">
+      <h3>Monthly Reflection</h3>
+      <textarea id="reflection" class="me-textarea">${escapeHtml(m.reflection)}</textarea>
 
       <h3>Expression</h3>
-      <textarea id="expression" class="me-textarea" placeholder="What did I say out loud that mattered? What did I avoid?">${escapeHtml(m.expression)}</textarea>
+      <textarea id="expression" class="me-textarea">${escapeHtml(m.expression)}</textarea>
 
       <h3>Relationships</h3>
-      <textarea id="relationships" class="me-textarea" placeholder="Where did I show up fully? Where did I shrink or over-function?">${escapeHtml(m.relationships)}</textarea>
-
-      <button id="btnSaveMonth" class="me-primary">Save Month</button>
-      <div id="saveMsg" style="margin-top:8px; opacity:0.85;"></div>
+      <textarea id="relationships" class="me-textarea">${escapeHtml(m.relationships)}</textarea>
     </div>
 
     <div class="me-card">
@@ -573,154 +499,146 @@ function renderMonth(state) {
         <div><strong id="alignScore">${m.alignmentScore}</strong>/100</div>
       </div>
       <input id="alignment" type="range" min="0" max="100" value="${m.alignmentScore}" style="width:100%; margin-top:10px;">
-      <div style="display:flex; justify-content:space-between; opacity:0.85; font-size:14px; margin-top:6px;">
-        <span>Silencing Myself</span>
-        <span>Acting Honestly</span>
-      </div>
     </div>
 
     <div class="me-card">
       <h3>Decision Matrix</h3>
-      <label class="me-label">Decision in front of me</label>
-      <textarea id="d_prompt" class="me-textarea" placeholder="What decision is asking for clarity right now?">${escapeHtml(m.decision.prompt)}</textarea>
+      <label class="me-label">Decision</label>
+      <textarea id="d_prompt" class="me-textarea">${escapeHtml(m.decision.prompt)}</textarea>
 
-      <label class="me-label">What am I afraid will happen?</label>
+      <label class="me-label">Fear</label>
       <textarea id="d_fear" class="me-textarea">${escapeHtml(m.decision.fear)}</textarea>
 
-      <label class="me-label">Cost of not acting</label>
+      <label class="me-label">Cost of inaction</label>
       <textarea id="d_cost" class="me-textarea">${escapeHtml(m.decision.costOfInaction)}</textarea>
 
       <label class="me-label">Aligned action</label>
       <textarea id="d_action" class="me-textarea">${escapeHtml(m.decision.alignedAction)}</textarea>
 
-      <label class="me-label">One small step this month</label>
+      <label class="me-label">Smallest step</label>
       <textarea id="d_step" class="me-textarea">${escapeHtml(m.decision.smallestStep)}</textarea>
-
-      <button id="btnSaveDecision" class="me-secondary">Save Decision Matrix</button>
-      <div id="saveMsg2" style="margin-top:8px; opacity:0.85;"></div>
     </div>
 
     <div class="me-card">
-      <h3>Identity Wheel</h3>
-      <div style="opacity:0.85; margin-bottom:10px;">
-        Rate each area 0–10. Current average: <strong>${wheelAvg}</strong>
-      </div>
-
-      ${renderWheelSlider("Self-Expression", "selfExpression", idw.selfExpression)}
-      ${renderWheelSlider("Courage", "courage", idw.courage)}
-      ${renderWheelSlider("Boundaries", "boundaries", idw.boundaries)}
-      ${renderWheelSlider("Creativity", "creativity", idw.creativity)}
-      ${renderWheelSlider("Relationships", "relationships", idw.relationships)}
-      ${renderWheelSlider("Discipline", "discipline", idw.discipline)}
-
-      <button id="btnSaveWheel" class="me-secondary">Save Identity Wheel</button>
-      <div id="saveMsg3" style="margin-top:8px; opacity:0.85;"></div>
-
-      <div style="margin-top:14px; opacity:0.85; font-size:14px;">
-        (Next upgrade: a circular visual wheel. This version establishes the data foundation.)
-      </div>
+      <h3>Identity Wheel Sliders</h3>
+      ${WHEEL_KEYS.map(([key,label]) => `
+        <div class="wheel-row" data-wheel="${key}">
+          <div class="wheel-title">${escapeHtml(label)}</div>
+          <input type="range" min="0" max="10" value="${Number(m.identityWheel[key] ?? 0)}" class="wheel-slider" style="width:100%;">
+          <div class="wheel-meta">
+            <span>0</span>
+            <span><strong class="wheel-val">${Number(m.identityWheel[key] ?? 0)}</strong>/10</span>
+            <span>10</span>
+          </div>
+        </div>
+      `).join("")}
     </div>
 
     <style>
       .me-card{background:#1e293b; padding:16px; border-radius:12px; margin-bottom:12px;}
-      .me-primary{width:100%; padding:12px; border-radius:10px; border:none; background:#38bdf8; color:#020617; font-size:16px; font-weight:800; margin-top:10px;}
-      .me-secondary{width:100%; padding:12px; border-radius:10px; border:none; background:#334155; color:#f8fafc; font-size:16px; font-weight:800; margin-top:10px;}
       .me-textarea{width:100%; min-height:110px; padding:12px; border-radius:10px; border:none; margin-top:8px; background:#0b1220; color:#f8fafc;}
-      .me-label{display:block; margin-top:10px; opacity:0.9;}
-      .me-chip{background:#0ea5e9; color:#021019; border:none; padding:10px 12px; border-radius:10px; font-weight:800;}
-      .me-topbar{display:flex; align-items:center; gap:10px; margin: 10px 0 16px;}
+      .me-label{display:block; margin-top:10px; opacity:0.9; font-weight:900;}
+      .me-select{width:100%; padding:12px; border-radius:10px; border:none; margin-top:8px; background:#0b1220; color:#f8fafc;}
+      .me-chip{background:#0ea5e9; color:#021019; border:none; padding:10px 12px; border-radius:10px; font-weight:900;}
+      .me-topbar{display:flex; align-items:center; gap:10px; margin: 10px 0 16px; flex-wrap:wrap;}
       .wheel-row{background:#0b1220; padding:12px; border-radius:10px; margin-top:10px;}
-      .wheel-title{font-weight:800; margin-bottom:6px;}
+      .wheel-title{font-weight:900; margin-bottom:6px;}
       .wheel-meta{display:flex; justify-content:space-between; opacity:0.85; font-size:14px;}
     </style>
   `;
 }
 
-function renderWheelSlider(label, key, value) {
-  return `
-    <div class="wheel-row" data-wheel="${key}">
-      <div class="wheel-title">${escapeHtml(label)}</div>
-      <input type="range" min="0" max="10" value="${value}" class="wheel-slider" style="width:100%;">
-      <div class="wheel-meta">
-        <span>0</span>
-        <span><strong class="wheel-val">${value}</strong>/10</span>
-        <span>10</span>
-      </div>
-    </div>
-  `;
-}
-
 function wireMonth(state) {
-  const mName = state.ui.currentMonth;
-  const m = state.workbook.months[mName];
+  const name = state.ui.currentMonth;
+  const m = state.workbook.months[name];
 
   el("btnBackDash")?.addEventListener("click", () => {
     state.ui.currentView = "dashboard";
-    saveState(state);
+    autosave(state);
     render();
   });
 
   el("btnYearEnd2")?.addEventListener("click", () => {
     state.ui.currentView = "yearEnd";
-    saveState(state);
+    autosave(state);
     render();
   });
 
+  // Draw wheel initial
+  drawIdentityWheel(el("monthWheel"), m.identityWheel, { size: 280 });
+
+  // bind autosave helper
+  const bind = (id, setter) => {
+    const node = el(id);
+    node?.addEventListener("input", () => { setter(node.value); autosave(state); });
+  };
+
+  // Daily
+  const dailyDate = el("dailyDate");
+  const dailyText = el("dailyText");
+  dailyDate?.addEventListener("change", () => {
+    m._uiDailyDate = dailyDate.value || todayISO();
+    autosave(state);
+    render(); // refresh displayed dailyText for that date
+  });
+  dailyText?.addEventListener("input", () => {
+    const d = (dailyDate?.value || m._uiDailyDate || todayISO());
+    m.dailyLogs[d] = dailyText.value;
+    autosave(state);
+  });
+
+  // Weekly
+  const weeklyKey = el("weeklyKey");
+  const weeklyText = el("weeklyText");
+  weeklyKey?.addEventListener("change", () => {
+    m._uiWeeklyKey = weeklyKey.value || "week1";
+    autosave(state);
+    render();
+  });
+  weeklyText?.addEventListener("input", () => {
+    const k = (weeklyKey?.value || m._uiWeeklyKey || "week1");
+    m.weeklyLogs[k] = weeklyText.value;
+    autosave(state);
+  });
+
+  // Monthly text areas
+  bind("reflection", (v)=> m.reflection = v);
+  bind("expression", (v)=> m.expression = v);
+  bind("relationships", (v)=> m.relationships = v);
+
+  // Decision matrix
+  bind("d_prompt", (v)=> m.decision.prompt = v);
+  bind("d_fear", (v)=> m.decision.fear = v);
+  bind("d_cost", (v)=> m.decision.costOfInaction = v);
+  bind("d_action", (v)=> m.decision.alignedAction = v);
+  bind("d_step", (v)=> m.decision.smallestStep = v);
+
+  // Alignment
   const align = el("alignment");
   align?.addEventListener("input", () => {
     const v = Number(align.value);
+    m.alignmentScore = v;
     el("alignScore").textContent = String(v);
     el("alignLabel").textContent = alignmentLabel(v);
+    autosave(state);
   });
 
-  el("btnSaveMonth")?.addEventListener("click", () => {
-    m.reflection = el("reflection").value;
-    m.expression = el("expression").value;
-    m.relationships = el("relationships").value;
-    saveState(state);
-    el("saveMsg").textContent = "Saved ✅";
-    setTimeout(()=>{ el("saveMsg").textContent = ""; }, 1200);
-  });
-
-  el("btnSaveDecision")?.addEventListener("click", () => {
-    m.decision.prompt = el("d_prompt").value;
-    m.decision.fear = el("d_fear").value;
-    m.decision.costOfInaction = el("d_cost").value;
-    m.decision.alignedAction = el("d_action").value;
-    m.decision.smallestStep = el("d_step").value;
-    saveState(state);
-    el("saveMsg2").textContent = "Saved ✅";
-    setTimeout(()=>{ el("saveMsg2").textContent = ""; }, 1200);
-  });
-
-  align?.addEventListener("change", () => {
-    m.alignmentScore = Number(align.value);
-    saveState(state);
-  });
-
+  // Wheel sliders
   document.querySelectorAll(".wheel-row").forEach(row => {
+    const key = row.getAttribute("data-wheel");
     const slider = row.querySelector(".wheel-slider");
     const valEl = row.querySelector(".wheel-val");
     slider?.addEventListener("input", () => {
       valEl.textContent = String(slider.value);
-    });
-  });
-
-  el("btnSaveWheel")?.addEventListener("click", () => {
-    document.querySelectorAll(".wheel-row").forEach(row => {
-      const key = row.getAttribute("data-wheel");
-      const slider = row.querySelector(".wheel-slider");
       m.identityWheel[key] = Number(slider.value);
+      drawIdentityWheel(el("monthWheel"), m.identityWheel, { size: 280 });
+      autosave(state);
     });
-    saveState(state);
-    el("saveMsg3").textContent = "Saved ✅";
-    setTimeout(()=>{ el("saveMsg3").textContent = ""; }, 1200);
   });
 }
 
 function renderYearEnd(state) {
   const y = state.workbook.yearEnd;
-
   return `
     <div class="me-topbar">
       <button id="btnBackDash3" class="me-chip" style="background:#334155; color:#f8fafc;">← Dashboard</button>
@@ -729,8 +647,8 @@ function renderYearEnd(state) {
     </div>
 
     <div class="me-card">
-      <h2 style="margin:0 0 6px;">Year-End Extraction</h2>
-      <div style="opacity:0.9;">Close 2026 with clarity, truth, and guidance.</div>
+      <h2>Year-End Extraction</h2>
+      <div style="opacity:.85;">Autosave ON here too.</div>
     </div>
 
     <div class="me-card">
@@ -746,26 +664,19 @@ function renderYearEnd(state) {
       <label class="me-label">Identity snapshot</label>
       <textarea id="y_identity" class="me-textarea">${escapeHtml(y.identitySnapshot)}</textarea>
 
-      <hr class="me-hr"/>
-
-      <label class="me-label">Letter to past self (gratitude)</label>
+      <label class="me-label">Letter to past self</label>
       <textarea id="y_past" class="me-textarea">${escapeHtml(y.letterToPastSelf)}</textarea>
 
-      <label class="me-label">Letter to 2027 self (guidance)</label>
+      <label class="me-label">Letter to 2027 self</label>
       <textarea id="y_future" class="me-textarea">${escapeHtml(y.letterToFutureSelf)}</textarea>
-
-      <button id="btnSaveYearEnd" class="me-primary">Save Year-End Pages</button>
-      <div id="saveMsgY" style="margin-top:8px; opacity:0.85;"></div>
     </div>
 
     <style>
       .me-card{background:#1e293b; padding:16px; border-radius:12px; margin-bottom:12px;}
-      .me-primary{width:100%; padding:12px; border-radius:10px; border:none; background:#38bdf8; color:#020617; font-size:16px; font-weight:800; margin-top:10px;}
       .me-textarea{width:100%; min-height:110px; padding:12px; border-radius:10px; border:none; margin-top:8px; background:#0b1220; color:#f8fafc;}
-      .me-label{display:block; margin-top:10px; opacity:0.9;}
-      .me-hr{border:none; border-top:1px solid rgba(255,255,255,0.12); margin:12px 0;}
-      .me-chip{background:#0ea5e9; color:#021019; border:none; padding:10px 12px; border-radius:10px; font-weight:800;}
-      .me-topbar{display:flex; align-items:center; gap:10px; margin: 10px 0 16px;}
+      .me-label{display:block; margin-top:10px; opacity:0.9; font-weight:900;}
+      .me-chip{background:#0ea5e9; color:#021019; border:none; padding:10px 12px; border-radius:10px; font-weight:900;}
+      .me-topbar{display:flex; align-items:center; gap:10px; margin: 10px 0 16px; flex-wrap:wrap;}
     </style>
   `;
 }
@@ -773,24 +684,23 @@ function renderYearEnd(state) {
 function wireYearEnd(state) {
   el("btnBackDash3")?.addEventListener("click", () => {
     state.ui.currentView = "dashboard";
-    saveState(state);
+    autosave(state);
     render();
   });
 
   el("btnExport2")?.addEventListener("click", () => exportData(state));
 
-  el("btnSaveYearEnd")?.addEventListener("click", () => {
-    const y = state.workbook.yearEnd;
-    y.stayedTrue = el("y_true").value;
-    y.shifted = el("y_shift").value;
-    y.decisionsThatMattered = el("y_decisions").value;
-    y.identitySnapshot = el("y_identity").value;
-    y.letterToPastSelf = el("y_past").value;
-    y.letterToFutureSelf = el("y_future").value;
-    saveState(state);
-    el("saveMsgY").textContent = "Saved ✅";
-    setTimeout(()=>{ el("saveMsgY").textContent = ""; }, 1200);
-  });
+  const bind = (id, setter) => {
+    const node = el(id);
+    node?.addEventListener("input", () => { setter(node.value); autosave(state); });
+  };
+
+  bind("y_true", (v)=> state.workbook.yearEnd.stayedTrue = v);
+  bind("y_shift", (v)=> state.workbook.yearEnd.shifted = v);
+  bind("y_decisions", (v)=> state.workbook.yearEnd.decisionsThatMattered = v);
+  bind("y_identity", (v)=> state.workbook.yearEnd.identitySnapshot = v);
+  bind("y_past", (v)=> state.workbook.yearEnd.letterToPastSelf = v);
+  bind("y_future", (v)=> state.workbook.yearEnd.letterToFutureSelf = v);
 }
 
 // ---------- Export ----------
@@ -798,7 +708,7 @@ function exportData(state) {
   const exportObj = {
     exportedAt: new Date().toISOString(),
     app: "ME App",
-    version: "single_2026_v1.2_theme",
+    version: "single_2026_v1.6_autosave_daily_weekly_monthly",
     profile: state.profile,
     workbook: state.workbook
   };
@@ -824,14 +734,6 @@ function fallbackDownload(json) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-}
-
-// ---------- Hook into your existing button ----------
-function createProfile() {
-  const state = ensureState();
-  state.ui.currentView = "home";
-  saveState(state);
-  render();
 }
 
 // ---------- Boot ----------
