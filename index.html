@@ -1,30 +1,28 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>ME App — Living It Out Loud</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="styles.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <title>ME App — Personal Workbook</title>
+  <meta name="description" content="A private, year-based personal reflection workbook that generates your theme from numerology and astrology." />
+
+  <!-- Open Graph (for iMessage / social previews) -->
+  <meta property="og:title" content="ME App — Personal Workbook" />
+  <meta property="og:description" content="Open the workbook, enter your birthdate, and get a personalized theme for 2026." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://imeabc123.github.io/MEApp/share.html" />
+
+  <!-- Optional: if you later add an image at /og.png -->
+  <!-- <meta property="og:image" content="https://imeabc123.github.io/MEApp/og.png" /> -->
+
+  <meta name="theme-color" content="#0f172a" />
+
+  <!-- Redirect into the actual app -->
+  <meta http-equiv="refresh" content="0; url=./" />
 </head>
-<body>
-
-<h1>ME App</h1>
-<p id="workbookTitle"></p>
-
-<label>Name</label>
-<input id="name" placeholder="Your full name">
-
-<label>Birthdate</label>
-<input id="birthdate" type="date">
-
-<label>Birthplace</label>
-<input id="birthplace" placeholder="City, State">
-
-<button onclick="createProfile()">Begin My 2026 Workbook</button>
-
-<div id="output"></div>
-
-<script src="app.js"></script>
+<body style="font-family: system-ui; padding: 20px;">
+  <p>Opening ME App…</p>
+  <p>If you are not redirected, tap: <a href="./">Open ME App</a></p>
 </body>
 </html>
