@@ -1,28 +1,86 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
+  <!-- Neutral App Metadata -->
   <title>ME App — Personal Workbook</title>
-  <meta name="description" content="A private, year-based personal reflection workbook that generates your theme from numerology and astrology." />
+  <meta name="description" content="A private, year-based personal reflection workbook that generates a unique theme from numerology and astrology." />
 
-  <!-- Open Graph (for iMessage / social previews) -->
+  <!-- Open Graph for iMessage / social previews -->
   <meta property="og:title" content="ME App — Personal Workbook" />
-  <meta property="og:description" content="Open the workbook, enter your birthdate, and get a personalized theme for 2026." />
+  <meta property="og:description" content="Enter your birthdate to generate your personalized 2026 workbook theme." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://imeabc123.github.io/MEApp/share.html" />
+  <meta property="og:url" content="https://imeabc123.github.io/MEApp/" />
 
-  <!-- Optional: if you later add an image at /og.png -->
-  <!-- <meta property="og:image" content="https://imeabc123.github.io/MEApp/og.png" /> -->
-
+  <!-- Theme / PWA basics -->
   <meta name="theme-color" content="#0f172a" />
+  <link rel="manifest" href="manifest.json" />
 
-  <!-- Redirect into the actual app -->
-  <meta http-equiv="refresh" content="0; url=./" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #020617;
+      color: #f8fafc;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    input, textarea, button {
+      font-family: inherit;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 12px;
+      margin-top: 6px;
+      border-radius: 10px;
+      border: none;
+      background: #0b1220;
+      color: #f8fafc;
+      box-sizing: border-box;
+    }
+    label {
+      display: block;
+      margin-top: 12px;
+      font-weight: 600;
+      opacity: 0.9;
+    }
+    button {
+      cursor: pointer;
+    }
+  </style>
 </head>
-<body style="font-family: system-ui; padding: 20px;">
-  <p>Opening ME App…</p>
-  <p>If you are not redirected, tap: <a href="./">Open ME App</a></p>
+
+<body>
+  <div class="container">
+
+    <!-- App Root -->
+    <div id="app">
+
+      <!-- Profile Inputs (used by app.js on Home screen) -->
+      <div id="profileInputs">
+        <label for="name">Name</label>
+        <input id="name" type="text" placeholder="Your name" />
+
+        <label for="birthdate">Birthdate</label>
+        <input id="birthdate" type="date" />
+
+        <label for="birthplace">Birthplace (optional)</label>
+        <input id="birthplace" type="text" placeholder="City, State / Country" />
+      </div>
+
+      <!-- App content renders here -->
+      <div id="output"></div>
+
+    </div>
+  </div>
+
+  <!-- Main App Logic -->
+  <script src="app.js"></script>
 </body>
 </html>
