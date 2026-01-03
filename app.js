@@ -1,21 +1,16 @@
-// ME App — 2026 Workbook (Single User) v1.1
-// Option C: "Living It Out Loud" applies ONLY to Matthew McLamb.
-// Everyone else sees a neutral title.
-//
+// ME App — 2026 Workbook (Single User) v1.2
+// Personalized year title + theme generated from Numerology + Western Sun Sign + Chinese Zodiac.
 // Stores everything locally on the device via localStorage.
-// Features: profile, numerology basics, monthly worksheets, alignment meter,
-// decision matrix, identity wheel (data foundation), year-end extraction, export/reset.
 
 const STORAGE_KEY = "meapp_single_2026_v1";
-const OWNER_NAME_CANON = "matthew mclamb";
-const OWNER_TITLE_2026 = "2026 Orientation — Living It Out Loud";
-const DEFAULT_TITLE_2026 = "2026 Personal Workbook";
+const YEAR = 2026;
 
 const MONTHS = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December"
 ];
 
+// Default month themes (can be overwritten by theme generator)
 const DEFAULT_MONTH_THEMES = {
   January:  "Where I Am Now",
   February: "Choice",
@@ -75,7 +70,7 @@ function buildEmptyWorkbook() {
         smallestStep: ""
       },
       identityWheel: {
-        // 0-10 sliders (simple, editable)
+        // 0-10 sliders
         selfExpression: 5,
         courage: 5,
         boundaries: 5,
@@ -87,8 +82,16 @@ function buildEmptyWorkbook() {
   });
 
   return {
-    year: 2026,
-    title: DEFAULT_TITLE_2026,
+    year: YEAR,
+    title: "2026 Personal Workbook",
+    themeLine: "",
+    profileInsights: {
+      lifePath: null,
+      birthdayNumber: null,
+      personalYear: null,
+      sunSign: "",
+      chineseZodiac: { element: "", animal: "" }
+    },
     months,
     yearEnd: {
       stayedTrue: "",
@@ -101,20 +104,8 @@ function buildEmptyWorkbook() {
   };
 }
 
-// Apply owner-only title (Option C)
-function applyOwnerTitleIfNeeded(state) {
-  const name = (state.profile?.name || "").trim().toLowerCase();
-  if (name === OWNER_NAME_CANON) {
-    state.workbook.title = OWNER_TITLE_2026;
-  } else if (!state.workbook.title || state.workbook.title === OWNER_TITLE_2026) {
-    // Keep non-owner neutral (and avoid accidentally inheriting owner title)
-    state.workbook.title = DEFAULT_TITLE_2026;
-  }
-}
-
 // ---------- Numerology ----------
 function reduceNumber(n) {
-  // keep master numbers 11/22/33
   while (n > 9 && n !== 11 && n !== 22 && n !== 33) {
     n = n.toString().split("").reduce((a, d) => a + Number(d), 0);
   }
@@ -139,6 +130,171 @@ function personalYearNumber(birthIso, year) {
   const [,m,d] = birthIso.split("-").map(Number);
   const sum = reduceNumber(m) + reduceNumber(d) + reduceNumber(year);
   return reduceNumber(sum);
+}
+
+// ---------- Western Sun Sign (approx but standard) ----------
+function sunSignFromISO(iso) {
+  const [,m,d] = iso.split("-").map(Number);
+  if ((m===3 && d>=21) || (m===4 && d<=19)) return "Aries";
+  if ((m===4 && d>=20) || (m===5 && d<=20)) return "Taurus";
+  if ((m===5 && d>=21) || (m===6 && d<=20)) return "Gemini";
+  if ((m===6 && d>=21) || (m===7 && d<=22)) return "Cancer";
+  if ((m===7 && d>=23) || (m===8 && d<=22)) return "Leo";
+  if ((m===8 && d>=23) || (m===9 && d<=22)) return "Virgo";
+  if ((m===9 && d>=23) || (m===10 && d<=22)) return "Libra";
+  if ((m===10 && d>=23) || (m===11 && d<=21)) return "Scorpio";
+  if ((m===11 && d>=22) || (m===12 && d<=21)) return "Sagittarius";
+  if ((m===12 && d>=22) || (m===1 && d<=19)) return "Capricorn";
+  if ((m===1 && d>=20) || (m===2 && d<=18)) return "Aquarius";
+  return "Pisces";
+}
+
+// ---------- Chinese Zodiac (animal + element cycle; simplified but correct) ----------
+function mod(n, m) { return ((n % m) + m) % m; }
+
+function chineseZodiacFromYear(year) {
+  // 1984 = Rat (start of a common reference cycle)
+  const animals = ["Rat","Ox","Tiger","Rabbit","Dragon","Snake","Horse","Goat","Monkey","Rooster","Dog","Pig"];
+  const animal = animals[mod(year - 1984, 12)];
+
+  // Heavenly stems 10-cycle (Wood Wood Fire Fire Earth Earth Metal Metal Water Water)
+  const stems = ["Wood","Wood","Fire","Fire","Earth","Earth","Metal","Metal","Water","Water"];
+  const element = stems[mod(year - 1984, 10)];
+
+  return { animal, element };
+}
+
+// ---------- Theme generator ----------
+function capitalize(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
+function themeFromProfile(profile) {
+  const lifePath = lifePathFromISO(profile.birthdate);
+  const birthdayNum = birthdayNumberFromISO(profile.birthdate);
+  const personalYear = personalYearNumber(profile.birthdate, YEAR);
+  const sunSign = sunSignFromISO(profile.birthdate);
+  const birthYear = Number(profile.birthdate.split("-")[0]);
+  const cz = chineseZodiacFromYear(birthYear);
+
+  const pyWords = {
+    1: ["new beginnings","bold choices","identity"],
+    2: ["patience","partnership","emotional truth"],
+    3: ["expression","joy","visibility"],
+    4: ["structure","discipline","stability"],
+    5: ["freedom","change","courage"],
+    6: ["love","responsibility","home"],
+    7: ["inner work","spiritual clarity","study"],
+    8: ["power","money mastery","leadership"],
+    9: ["release","completion","forgiveness"],
+    11:["intuition","awakening","calling"],
+    22:["builder energy","legacy","systems"],
+    33:["service","healing","devotion"]
+  };
+
+  const lpLine = {
+    1:"Lead with self-trust.",
+    2:"Choose peace and honesty.",
+    3:"Say it out loud.",
+    4:"Build what lasts.",
+    5:"Take the brave step.",
+    6:"Nurture what matters.",
+    7:"Listen deeper.",
+    8:"Own your power cleanly.",
+    9:"Let go to move forward.",
+    11:"Follow the signal.",
+    22:"Build the vision.",
+    33:"Serve with heart."
+  };
+
+  const signFlavor = {
+    Aries:"act decisively",
+    Taurus:"simplify and stabilize",
+    Gemini:"speak, connect, experiment",
+    Cancer:"protect your inner world",
+    Leo:"be seen on purpose",
+    Virgo:"refine and improve",
+    Libra:"choose balance over pleasing",
+    Scorpio:"tell the truth fully",
+    Sagittarius:"expand and commit",
+    Capricorn:"build and lead steadily",
+    Aquarius:"be original and consistent",
+    Pisces:"trust intuition and create meaning"
+  };
+
+  const words = pyWords[personalYear] || ["alignment","truth","momentum"];
+  const title = `2026: ${capitalize(words[0])} & ${capitalize(words[2])}`;
+  const themeLine = `${lpLine[lifePath] || "Choose what aligns."} ${sunSign}: ${signFlavor[sunSign] || "act with honesty"} • ${cz.element} ${cz.animal}`;
+
+  // Optional: tailor month themes based on personal year + sign
+  const monthOverrides = buildMonthThemes(personalYear, sunSign);
+
+  return {
+    title,
+    themeLine,
+    insights: {
+      lifePath,
+      birthdayNumber: birthdayNum,
+      personalYear,
+      sunSign,
+      chineseZodiac: cz
+    },
+    monthOverrides
+  };
+}
+
+function buildMonthThemes(personalYear, sunSign) {
+  // Keep your original structure but add slight personal seasoning.
+  const base = { ...DEFAULT_MONTH_THEMES };
+
+  // Personal Year steering: subtle & helpful
+  const pyHint = {
+    1: "Start",
+    2: "Relate",
+    3: "Express",
+    4: "Build",
+    5: "Change",
+    6: "Care",
+    7: "Reflect",
+    8: "Lead",
+    9: "Release",
+    11:"Awaken",
+    22:"Construct",
+    33:"Serve"
+  }[personalYear] || "Align";
+
+  // Sun sign flavor word (short)
+  const signWord = {
+    Aries:"Bold", Taurus:"Steady", Gemini:"Curious", Cancer:"Protected",
+    Leo:"Visible", Virgo:"Refined", Libra:"Balanced", Scorpio:"Truthful",
+    Sagittarius:"Expansive", Capricorn:"Grounded", Aquarius:"Original", Pisces:"Intuitive"
+  }[sunSign] || "Clear";
+
+  // Blend into a few months without changing your overall arc
+  base.February = `${base.February} — ${pyHint}`;
+  base.May = `${base.May} — ${signWord}`;
+  base.August = `${base.August} — ${pyHint}`;
+  base.December = `Integration — ${signWord}`;
+
+  return base;
+}
+
+function applyPersonalTheme(state) {
+  if (!state.profile?.birthdate) return;
+
+  const t = themeFromProfile(state.profile);
+
+  state.workbook.title = t.title;
+  state.workbook.themeLine = t.themeLine;
+  state.workbook.profileInsights = t.insights;
+
+  // Apply month overrides (only set if month theme still default-ish or empty)
+  MONTHS.forEach(m => {
+    const current = state.workbook.months[m].theme || "";
+    const override = t.monthOverrides[m] || "";
+    // If user hasn't customized it, apply the override
+    if (!current || current === DEFAULT_MONTH_THEMES[m]) {
+      state.workbook.months[m].theme = override || current || DEFAULT_MONTH_THEMES[m];
+    }
+  });
 }
 
 // ---------- Helpers ----------
@@ -173,7 +329,6 @@ function monthProgressSummary(m) {
 // ---------- Rendering ----------
 function render() {
   const state = ensureState();
-  applyOwnerTitleIfNeeded(state);
 
   const container = el("output") || el("app") || document.body;
 
@@ -230,6 +385,7 @@ function renderHome(state) {
     <div class="me-card">
       <h2>ME App</h2>
       <p><strong>${escapeHtml(state.workbook.title)}</strong></p>
+      ${state.workbook.themeLine ? `<p style="opacity:.9">${escapeHtml(state.workbook.themeLine)}</p>` : ""}
       <p>Enter your information above, then tap the button.</p>
 
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
@@ -261,7 +417,9 @@ function wireHome(state) {
     }
 
     state.profile = { name, birthdate, birthplace };
-    applyOwnerTitleIfNeeded(state);
+
+    // Generate personalized title/theme
+    applyPersonalTheme(state);
 
     state.ui.currentView = "dashboard";
     saveState(state);
@@ -279,9 +437,7 @@ function wireHome(state) {
 
 function renderDashboard(state) {
   const p = state.profile;
-  const lp = lifePathFromISO(p.birthdate);
-  const bd = birthdayNumberFromISO(p.birthdate);
-  const py = personalYearNumber(p.birthdate, state.workbook.year);
+  const i = state.workbook.profileInsights;
 
   const monthCards = MONTHS.map(m => {
     const mm = state.workbook.months[m];
@@ -298,7 +454,8 @@ function renderDashboard(state) {
     <div class="me-topbar">
       <div>
         <div class="me-h1">Welcome, ${escapeHtml(p.name)}</div>
-        <div class="me-sub">${escapeHtml(state.workbook.title)} • Saved on this device</div>
+        <div class="me-sub"><strong>${escapeHtml(state.workbook.title)}</strong></div>
+        ${state.workbook.themeLine ? `<div class="me-sub">${escapeHtml(state.workbook.themeLine)}</div>` : ""}
       </div>
       <button id="btnExport" class="me-chip">Export</button>
     </div>
@@ -309,9 +466,11 @@ function renderDashboard(state) {
         <div><strong>Birthdate:</strong> ${escapeHtml(p.birthdate)}</div>
         <div><strong>Birthplace:</strong> ${escapeHtml(p.birthplace)}</div>
         <hr class="me-hr"/>
-        <div><strong>Life Path:</strong> ${lp ?? "—"}</div>
-        <div><strong>Birthday Number:</strong> ${bd ?? "—"}</div>
-        <div><strong>Personal Year (2026):</strong> ${py ?? "—"}</div>
+        <div><strong>Life Path:</strong> ${i.lifePath ?? "—"}</div>
+        <div><strong>Birthday Number:</strong> ${i.birthdayNumber ?? "—"}</div>
+        <div><strong>Personal Year (2026):</strong> ${i.personalYear ?? "—"}</div>
+        <div><strong>Sun Sign:</strong> ${escapeHtml(i.sunSign || "—")}</div>
+        <div><strong>Chinese Zodiac:</strong> ${escapeHtml((i.chineseZodiac?.element || "") + " " + (i.chineseZodiac?.animal || ""))}</div>
       </div>
 
       <div class="me-card">
@@ -329,7 +488,7 @@ function renderDashboard(state) {
     </div>
 
     <style>
-      .me-topbar{display:flex; justify-content:space-between; align-items:center; gap:12px; margin: 10px 0 16px;}
+      .me-topbar{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin: 10px 0 16px;}
       .me-h1{font-size:28px; font-weight:800; margin-bottom:4px;}
       .me-sub{opacity:0.85}
       .me-chip{background:#0ea5e9; color:#021019; border:none; padding:10px 12px; border-radius:10px; font-weight:700;}
@@ -458,7 +617,7 @@ function renderMonth(state) {
       <div id="saveMsg3" style="margin-top:8px; opacity:0.85;"></div>
 
       <div style="margin-top:14px; opacity:0.85; font-size:14px;">
-        (Next upgrade: a circular visual wheel. This v1 is the data foundation.)
+        (Next upgrade: a circular visual wheel. This version establishes the data foundation.)
       </div>
     </div>
 
@@ -636,19 +795,19 @@ function wireYearEnd(state) {
 
 // ---------- Export ----------
 function exportData(state) {
-  applyOwnerTitleIfNeeded(state);
   const exportObj = {
     exportedAt: new Date().toISOString(),
     app: "ME App",
-    version: "single_2026_v1.1",
+    version: "single_2026_v1.2_theme",
     profile: state.profile,
     workbook: state.workbook
   };
 
   const json = JSON.stringify(exportObj, null, 2);
+
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(json).then(() => {
-      alert("Export copied to clipboard ✅\n\nPaste it into Notes/Email to save or send.");
+      alert("Export copied to clipboard ✅\n\nPaste into Notes/Email to save or send.");
     }).catch(() => fallbackDownload(json));
   } else {
     fallbackDownload(json);
@@ -671,7 +830,6 @@ function fallbackDownload(json) {
 function createProfile() {
   const state = ensureState();
   state.ui.currentView = "home";
-  applyOwnerTitleIfNeeded(state);
   saveState(state);
   render();
 }
