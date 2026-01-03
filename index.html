@@ -2,70 +2,116 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
-  <!-- Neutral App Metadata -->
   <title>ME App — Personal Workbook</title>
   <meta name="description" content="A private, year-based personal reflection workbook that generates a unique theme from numerology and astrology." />
 
-  <!-- Open Graph for iMessage / social previews -->
+  <!-- Open Graph previews -->
   <meta property="og:title" content="ME App — Personal Workbook" />
   <meta property="og:description" content="Enter your birthdate to generate your personalized 2026 workbook theme." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://imeabc123.github.io/MEApp/" />
 
-  <!-- Theme / PWA basics -->
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="manifest.json" />
 
   <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #020617;
-      color: #f8fafc;
+    :root{
+      --bg:#020617;
+      --panel:#1e293b;
+      --panel2:#0b1220;
+      --text:#f8fafc;
+      --muted:rgba(248,250,252,.85);
+      --ring:rgba(56,189,248,.35);
     }
-    .container {
-      max-width: 900px;
+
+    *{ box-sizing:border-box; }
+
+    body{
+      margin:0;
+      padding:0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Bigger, nicer baseline text on iPhone */
+    html { font-size: 17px; }
+    @media (min-width: 650px) { html { font-size: 18px; } }
+
+    .container{
+      max-width: 980px;
       margin: 0 auto;
       padding: 16px;
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+      padding-top: max(16px, env(safe-area-inset-top));
+      padding-bottom: max(16px, env(safe-area-inset-bottom));
     }
-    input, textarea, button {
-      font-family: inherit;
+
+    /* The profile input block is always present in HTML;
+       app.js uses those inputs on the Home screen. */
+    #profileInputs{
+      background: var(--panel);
+      border-radius: 14px;
+      padding: 16px;
+      margin: 10px 0 14px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.06) inset;
     }
-    input, textarea {
-      width: 100%;
-      padding: 12px;
-      margin-top: 6px;
-      border-radius: 10px;
-      border: none;
-      background: #0b1220;
-      color: #f8fafc;
-      box-sizing: border-box;
-    }
-    label {
-      display: block;
+
+    label{
+      display:block;
       margin-top: 12px;
-      font-weight: 600;
-      opacity: 0.9;
+      font-weight: 700;
+      opacity: .92;
+      letter-spacing: .1px;
     }
-    button {
-      cursor: pointer;
+
+    input, textarea, button{
+      font-family: inherit;
+      font-size: 1rem;
+    }
+
+    input, textarea{
+      width:100%;
+      padding: 12px 12px;
+      margin-top: 8px;
+      border-radius: 12px;
+      border: none;
+      background: var(--panel2);
+      color: var(--text);
+      outline: none;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.06) inset;
+    }
+
+    input:focus, textarea:focus{
+      box-shadow: 0 0 0 3px var(--ring), 0 0 0 1px rgba(255,255,255,.06) inset;
+    }
+
+    /* Give the app area a little breathing room */
+    #output{ margin-top: 12px; }
+
+    /* Make buttons feel nicer even before app.js injects its own styles */
+    button{
+      border: none;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-weight: 800;
     }
   </style>
 </head>
 
 <body>
   <div class="container">
-
-    <!-- App Root -->
     <div id="app">
 
-      <!-- Profile Inputs (used by app.js on Home screen) -->
+      <!-- Inputs used by app.js -->
       <div id="profileInputs">
         <label for="name">Name</label>
-        <input id="name" type="text" placeholder="Your name" />
+        <input id="name" type="text" placeholder="Your name" autocomplete="name" />
 
         <label for="birthdate">Birthdate</label>
         <input id="birthdate" type="date" />
@@ -74,13 +120,12 @@
         <input id="birthplace" type="text" placeholder="City, State / Country" />
       </div>
 
-      <!-- App content renders here -->
+      <!-- App renders here -->
       <div id="output"></div>
 
     </div>
   </div>
 
-  <!-- Main App Logic -->
   <script src="app.js"></script>
 </body>
 </html>
